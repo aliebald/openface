@@ -19,6 +19,7 @@ import sys
 fileDir = os.path.dirname(os.path.realpath(__file__))
 sys.path.append(os.path.join(fileDir, "..", ".."))
 
+import time
 import txaio
 txaio.use_twisted()
 
@@ -36,12 +37,12 @@ import json
 from PIL import Image
 import numpy as np
 import os
-import StringIO
+from io import BytesIO
 import urllib
 import base64
 
 from sklearn.decomposition import PCA
-from sklearn.grid_search import GridSearchCV
+from sklearn.model_selection import GridSearchCV
 from sklearn.manifold import TSNE
 from sklearn.svm import SVC
 
@@ -110,6 +111,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         print("WebSocket connection open.")
 
     def onMessage(self, payload, isBinary):
+        startTime = time.time() # TODO remove debug variable
         raw = payload.decode('utf8')
         msg = json.loads(raw)
         print("Received {} message of length {}.".format(
@@ -117,10 +119,10 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         if msg['type'] == "ALL_STATE":
             self.loadState(msg['images'], msg['training'], msg['people'])
         elif msg['type'] == "NULL":
-            self.sendMessage('{"type": "NULL"}')
+            self.sendMessage(b'{"type": "NULL"}')
         elif msg['type'] == "FRAME":
             self.processFrame(msg['dataURL'], msg['identity'])
-            self.sendMessage('{"type": "PROCESSED"}')
+            self.sendMessage(b'{"type": "PROCESSED"}')
         elif msg['type'] == "TRAINING":
             self.training = msg['val']
             if not self.training:
@@ -148,6 +150,9 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             self.sendTSNE(msg['people'])
         else:
             print("Warning: Unknown message type: {}".format(msg['type']))
+        
+        duration = round((time.time() - startTime)*1000) # TODO remove debug output
+        print(f"duration: {duration}ms")
 
     def onClose(self, wasClean, code, reason):
         print("WebSocket connection closed: {0}".format(reason))
@@ -199,8 +204,8 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         else:
             (X, y) = d
 
-        X_pca = PCA(n_components=50).fit_transform(X, X)
-        tsne = TSNE(n_components=2, init='random', random_state=0)
+        X_pca = PCA(n_components=50).fit_transform(X, X) # TODO handle error if num images for person < 50
+        tsne = TSNE(n_components=2, init='random', random_state=0) 
         X_r = tsne.fit_transform(X_pca)
 
         yVals = list(np.unique(y))
@@ -214,17 +219,17 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
             plt.scatter(X_r[y == i, 0], X_r[y == i, 1], c=c, label=name)
             plt.legend()
 
-        imgdata = StringIO.StringIO()
+        imgdata = BytesIO()
         plt.savefig(imgdata, format='png')
         imgdata.seek(0)
 
         content = 'data:image/png;base64,' + \
-                  urllib.quote(base64.b64encode(imgdata.buf))
+                  urllib.parse.quote(base64.b64encode(imgdata.getvalue()))
         msg = {
             "type": "TSNE_DATA",
             "content": content
         }
-        self.sendMessage(json.dumps(msg))
+        self.sendMessage(json.dumps(msg).encode("utf-8"))
 
     def trainSVM(self):
         print("+ Training SVM on {} labeled images.".format(len(self.images)))
@@ -251,7 +256,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
         head = "data:image/jpeg;base64,"
         assert(dataURL.startswith(head))
         imgdata = base64.b64decode(dataURL[len(head):])
-        imgF = StringIO.StringIO()
+        imgF = BytesIO()
         imgF.write(imgdata)
         imgF.seek(0)
         img = Image.open(imgF)
@@ -301,7 +306,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                         "identity": identity,
                         "representation": rep.tolist()
                     }
-                    self.sendMessage(json.dumps(msg))
+                    self.sendMessage(json.dumps(msg).encode("utf-8"))
                 else:
                     if len(self.people) == 0:
                         identity = -1
@@ -329,7 +334,7 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                     else:
                         name = "Unknown"
                 else:
-                    name = self.people[identity]
+                    name = self.people[identity].decode("ascii")
                 cv2.putText(annotatedFrame, name, (bb.left(), bb.top() - 10),
                             cv2.FONT_HERSHEY_SIMPLEX, fontScale=0.75,
                             color=(152, 255, 204), thickness=2)
@@ -339,24 +344,24 @@ class OpenFaceServerProtocol(WebSocketServerProtocol):
                 "type": "IDENTITIES",
                 "identities": identities
             }
-            self.sendMessage(json.dumps(msg))
+            self.sendMessage(json.dumps(msg).encode("utf-8"))
 
             plt.figure()
             plt.imshow(annotatedFrame)
             plt.xticks([])
             plt.yticks([])
 
-            imgdata = StringIO.StringIO()
+            imgdata = BytesIO()
             plt.savefig(imgdata, format='png')
             imgdata.seek(0)
             content = 'data:image/png;base64,' + \
-                urllib.quote(base64.b64encode(imgdata.buf))
+                urllib.parse.quote(base64.b64encode(imgdata.getvalue()))
             msg = {
                 "type": "ANNOTATED",
                 "content": content
             }
             plt.close()
-            self.sendMessage(json.dumps(msg))
+            self.sendMessage(json.dumps(msg).encode("utf-8"))
 
 
 def main(reactor):

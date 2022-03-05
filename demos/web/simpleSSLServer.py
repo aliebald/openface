@@ -1,6 +1,5 @@
 from __future__ import print_function
-import BaseHTTPServer
-import SimpleHTTPServer
+from http.server import HTTPServer, SimpleHTTPRequestHandler
 import ssl
 import sys
 
@@ -9,7 +8,7 @@ import sys
 
 
 def main(port):
-    httpd = BaseHTTPServer.HTTPServer(('0.0.0.0', port), SimpleHTTPServer.SimpleHTTPRequestHandler)
+    httpd = HTTPServer(('0.0.0.0', port), SimpleHTTPRequestHandler)
     httpd.socket = ssl.wrap_socket(httpd.socket, certfile='tls/server.pem', server_side=True)
     print('now serving tls http on port:', port)
     httpd.serve_forever()
