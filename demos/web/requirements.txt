@@ -1,10 +1,10 @@
-autobahn == 0.10.4
-imagehash == 1.0
-twisted == 15.2.1
-scipy >= 0.13, < 0.17
-scikit-learn >= 0.17, < 0.18
-protobuf >= 2.5, < 2.7
-appdirs >= 1.4.3
-pyOpenSSL >= 17.0.0
-cryptography >= 1.8.1
-service-identity >= 16.0.0
+autobahn >= 22.2.2
+imagehash >= 3.2.1
+twisted >= 22.2.0
+scipy >= 1.8.0
+scikit-learn >= 1.0.2
+protobuf >= 3.19.4
+appdirs >= 1.4.4
+pyOpenSSL >= 22.0.0
+cryptography >= 36.0.1
+service-identity >= 21.1.0
